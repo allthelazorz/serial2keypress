@@ -1,6 +1,6 @@
 # serial2keypress
 
-I have thrown together this small program to be able to use the excellent Morserino keyer as a keyboard on my PC.
+I have thrown together this small program to be able to use the excellent Morserino device as a keyboard on my PC.
 
 https://www.morserino.info/
 
