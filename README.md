@@ -9,3 +9,5 @@ The code is ugly, could be improved in lot of ways, I will probably do some fixe
 The Morserino outputs the keyed characters on its USB-serial port, this program converts it to Windows keypresses, so you can type into any other window as long as the program is running.
 
 I have built the code in Visual Studio as a C++ Console App. I have uploaded the current build if you don't have it installed. I swear I haven't put any malicious thing into it, but it is generally not wise to trust a random executable you find on the Internet.
+
+The program will create a serial2keypress.cfg file in the working directory, write a sample config into it, and use it in the next runs.
