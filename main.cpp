@@ -1,6 +1,16 @@
 #include <windows.h>
 #include <stdio.h>
 
+#include <iostream>
+
+# define COMPORT_LENGTH 100
+
+void wait_exit(int code) {
+    printf("press enter to exit\n");
+    std::getchar();
+    exit(code);
+}
+
 int ReadByte(LPCWSTR PortSpecifier);
 
 int translatechar(char c) {
@@ -52,14 +62,76 @@ int translatechar(char c) {
         return 0x34;
     }
     
-    return -1;
+    return 0;
 }
 
+bool space_passthrough = false;
+
 int main( ) {
-    printf("opening port\n");
+    printf("opening serial2keypress.cfg\n");
+    FILE *conffile;
+    fopen_s(&conffile, "serial2keypress.cfg", "r");
+    if (!conffile) {
+        printf("couldn't find config file, creating a new one\n");
+        fopen_s(&conffile, "serial2keypress.cfg", "w");
+        if (!conffile) {
+            printf("couldn't open serial2keypress.cfg in the current location for writing, exiting\n");
+            wait_exit(1);
+        }
+        fprintf(conffile, "\\\\.\\COM5\n");
+        fprintf(conffile, "no_space_passthrough\n");
+        fclose(conffile);
+        printf("wrote conffile with default configuration, please start the program again\n");
+        wait_exit(0);
+    }
+
+    int comport_length = COMPORT_LENGTH;
+    char comport[COMPORT_LENGTH];
+
+    if (!fgets(comport, comport_length, conffile)) {
+        printf("configuration file error: first line should be COM port name, e.g.: \\\\.\\COM5\n");
+        wait_exit(1);
+    }
+
+    comport[strcspn(comport, "\n")] = 0;
+
+    wchar_t wcomport[COMPORT_LENGTH * 2];
+    size_t* retval = NULL;
+    mbstowcs_s(retval, wcomport, sizeof(wcomport), comport, strlen(comport) + 1);  // not sure about this
+
+    std::wcout << "\"" << wcomport << "\"" << std::endl;
+
+
+    char sp_passthrough[COMPORT_LENGTH];
+
+    if (!fgets(sp_passthrough, COMPORT_LENGTH, conffile)) {
+        printf("configuration file error: second line should be either space_passthrough or no_space_passthrough\n");
+        wait_exit(1);
+    }
+
+    fclose(conffile);
+
+    sp_passthrough[strcspn(sp_passthrough, "\n")] = 0;
+
+    if (!strcmp(sp_passthrough, "no_space_passthrough")) {
+        space_passthrough = false;
+    } else if (!strcmp(sp_passthrough, "space_passthrough")) {
+        space_passthrough = true;
+    } else {
+        printf("configuration file error: second line should be either space_passthrough or no_space_passthrough\n");
+        wait_exit(1);
+    }
+
+    printf("space passthrough: %d\n", space_passthrough);
+
+
+
+    printf("opening port %s\n", comport);
+
 
     // in cmd: wmic path Win32_SerialPort
-    ReadByte(L"\\\\.\\COM5");
+//    ReadByte(L"\\\\.\\COM5");
+    ReadByte(wcomport);
 }
 
 void sendkey(char c) {
@@ -105,7 +177,7 @@ int ReadByte(LPCWSTR PortSpecifier)
     int retVal;
     BYTE Byte;
     DWORD dwBytesTransferred;
-    DWORD dwCommModemStatus;
+    DWORD dwCommModemStatus = 0;
 
     HANDLE hPort = CreateFile(
         PortSpecifier,
@@ -118,8 +190,8 @@ int ReadByte(LPCWSTR PortSpecifier)
     );
 
     if (!GetCommState(hPort, &dcb)) {
-        printf("error\n");
-        exit(1);
+        printf("error getting port state\n");
+        wait_exit(1);
     }
 
     printf("setting state\n");
@@ -132,7 +204,7 @@ int ReadByte(LPCWSTR PortSpecifier)
     if (!SetCommState(hPort, &dcb))
         return 0x100;
 
-    printf("so far, so good\n");
+    printf("everything seems good, reading characters\n");
 
     while (true) {
         SetCommMask(hPort, EV_RXCHAR | EV_ERR);
@@ -140,11 +212,9 @@ int ReadByte(LPCWSTR PortSpecifier)
 
         if (dwCommModemStatus & EV_RXCHAR) {
             while (ReadFile(hPort, &Byte, 1, &dwBytesTransferred, 0)) {
-                // use the first one if you want to pass through spaces
-//                if (Byte < 128) {
-                if (Byte != ' ' && Byte < 128) {
-                    sendkey(Byte);
-                }
+                    if (Byte != ' ' || space_passthrough) {
+                        sendkey(Byte);
+                    }
             }
         }
         else if (dwCommModemStatus & EV_ERR)
