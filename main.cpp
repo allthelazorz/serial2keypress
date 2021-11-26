@@ -2,6 +2,7 @@
 #include <stdio.h>
 
 #include <iostream>
+#include <synchapi.h>
 
 # define COMPORT_LENGTH 100
 
@@ -212,9 +213,24 @@ int ReadByte(LPCWSTR PortSpecifier)
 
         if (dwCommModemStatus & EV_RXCHAR) {
             while (ReadFile(hPort, &Byte, 1, &dwBytesTransferred, 0)) {
-                    if (Byte != ' ' || space_passthrough) {
-                        sendkey(Byte);
+                Sleep(10); // 10 ms, serial rate is 115200 b/s, so that would be about 100 characters
+
+                DWORD   lpErrors;
+                COMSTAT lpStat;
+                ClearCommError(hPort, &lpErrors, &lpStat);
+                if (10 < lpStat.cbInQue) {
+                    printf("got wake-up message, suppressing it... avail %d\n", lpStat.cbInQue);
+                    clock_t timestamp = clock();
+                    while (true) {
+                        ReadFile(hPort, &Byte, 1, &dwBytesTransferred, 0);
+                        if (1 < ((clock() - timestamp) / CLOCKS_PER_SEC ) ) {  // more than one second has passed
+                            break;
+                        }
                     }
+                }
+                if (Byte != ' ' || space_passthrough) {
+                    sendkey(Byte);
+                }
             }
         }
         else if (dwCommModemStatus & EV_ERR)
